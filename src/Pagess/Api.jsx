@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 export default function SpeechToText() {
   const [recording, setRecording] = useState(false);
   const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunks = useRef([]);
 
@@ -18,12 +19,14 @@ export default function SpeechToText() {
       mediaRecorder.ondataavailable = (event) => {
         audioChunks.current.push(event.data);
       };
-//  make audio file 
+
+      //  make audio file
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunks.current, {
           type: "audio/webm",
         });
 
+        setLoading(true);
         sendAudio(audioBlob);
       };
 
@@ -31,7 +34,8 @@ export default function SpeechToText() {
       setRecording(true);
     });
   };
-// stop recording func
+
+  // stop recording func
   const stopRecording = () => {
     mediaRecorderRef.current.stop();
     setRecording(false);
@@ -46,7 +50,7 @@ export default function SpeechToText() {
     formData.append("blocking", "true");
     formData.append("run_diarization", "false");
 
-    // fetch 
+    // fetch
     fetch("https://uzbekvoice.ai/api/v1/stt", {
       method: "POST",
       headers: {
@@ -58,49 +62,67 @@ export default function SpeechToText() {
       .then((res) => res.json())
       .then((data) => {
         setText(data.result.text || "Text topilmadi");
+        setLoading(false);
       })
       .catch((err) => {
         console.error(err);
         setText("Xatolik yuz berdi");
+        setLoading(false);
       });
   };
 
   return (
     <>
-    <div className="flex w-full justify-center  gap-6 p-10" >
-      <h2 className="font-bold text-[36px]">Ovozni matnga aylantirib beradi</h2>
-    </div>
-    <div className="flex w-full justify-center pt-30 gap-6 p-10">
+      <div className="flex w-full justify-center  gap-6 p-10">
+        <h2 className="font-bold text-[36px]">Ovozni matnga aylantiring</h2>
+      </div>
 
-      {/* mic card */}
-      <div className="w-80 p-6 border rounded-xl shadow  ">
-        <h2 className="text-xl font-bold mb-4">Mikrafoni yoqing!</h2>
+      <div className="flex w-full justify-center pt-30 gap-6 p-10">
+        {/* mic card */}
+        <div className="w-80 p-6 border rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-4">Mikrafoni yoqing!</h2>
 
-        <div className="pt-15">
-          {!recording ? (
-          <button
-            onClick={startRecording}
-            className="bg-green-500 text-white px-3 py-1 rounded"
-          >
-      <Mic />
-          </button>
-        ) : (
-          <button
-            onClick={stopRecording}
-            className="bg-red-500 text-white px-3 py-1 rounded"
-          >
-          <MicOff />
-          </button>
+          <div className="pt-15">
+            {!recording ? (
+              <button
+                onClick={startRecording}
+                className="bg-green-500 text-white px-3 py-1 rounded"
+              >
+                <Mic />
+              </button>
+            ) : (
+              <button
+                onClick={stopRecording}
+                className="bg-red-500 text-white px-3 py-1 rounded"
+              >
+                <MicOff />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* wave loader */}
+        {loading && (
+          <div className="flex items-center gap-1">
+            <span className="w-1 h-6 bg-blue-500 animate-pulse"></span>
+            <span className="w-1 h-10 bg-blue-500 animate-pulse"></span>
+            <span className="w-1 h-6 bg-blue-500 animate-pulse"></span>
+            <span className="w-1 h-10 bg-blue-500 animate-pulse"></span>
+            <span className="w-1 h-6 bg-blue-500 animate-pulse"></span>
+          </div>
         )}
+
+        {/* text card */}
+        <div className="w-80 p-6 border rounded-xl shadow">
+          <h2 className="text-xl font-bold mb-4">Matn xolati.</h2>
+
+          {loading ? (
+            <p className="text-gray-500">Loading...</p>
+          ) : (
+            <p>{text || <span className="text-gray-400">Bu yerda natija chiqadi...</span>}</p>
+          )}
         </div>
       </div>
-
-      {/* text card */}
-      <div className="w-80 p-6 border rounded-xl shadow">
-        <h2 className="text-xl font-bold mb-4">Matn xolati.</h2>
-        <p>{text || <p className="text-gray-400">Bu yerda natija chiqadi...</p>}</p>
-      </div>
-    </div>
     </>
   );
 }
