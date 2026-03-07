@@ -1,4 +1,11 @@
-import { Mic, MicOff, Volume2, CheckCircle, AlertCircle, X } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  Volume2,
+  CheckCircle,
+  AlertCircle,
+  X,
+} from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 
 export default function SpeechToText() {
@@ -8,6 +15,10 @@ export default function SpeechToText() {
   const [error, setError] = useState("");
   const [audioLevel, setAudioLevel] = useState(0);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [language, setLanguage] = useState("uz");
+  const [startTime, setStartTime] = useState(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [showCopied, setShowCopied] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunks = useRef([]);
   const analyserRef = useRef(null);
@@ -19,10 +30,10 @@ export default function SpeechToText() {
 
     const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
     analyserRef.current.getByteFrequencyData(dataArray);
-    
+
     const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
     setAudioLevel(Math.min(100, (average / 255) * 150));
-    
+
     animationRef.current = requestAnimationFrame(updateAudioLevel);
   };
 
@@ -34,7 +45,9 @@ export default function SpeechToText() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioContext = new (
+        window.AudioContext || window.webkitAudioContext
+      )();
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
       const source = audioContext.createMediaStreamSource(stream);
@@ -56,8 +69,8 @@ export default function SpeechToText() {
 
         setLoading(true);
         sendAudio(audioBlob);
-        
-        stream.getTracks().forEach(track => track.stop());
+
+        stream.getTracks().forEach((track) => track.stop());
         if (animationRef.current) {
           cancelAnimationFrame(animationRef.current);
         }
@@ -65,6 +78,8 @@ export default function SpeechToText() {
 
       mediaRecorder.start();
       setRecording(true);
+      setStartTime(Date.now());
+      setElapsed(0);
       updateAudioLevel();
     } catch (err) {
       setError("Mikrofondan foydalanishda xatolik");
@@ -77,13 +92,14 @@ export default function SpeechToText() {
       mediaRecorderRef.current.stop();
       setRecording(false);
       setAudioLevel(0);
+      setStartTime(null);
     }
   };
 
   const sendAudio = (blob) => {
     const formData = new FormData();
     formData.append("file", blob);
-    formData.append("language", "uz");
+    formData.append("language", language);
     formData.append("blocking", "true");
     formData.append("run_diarization", "false");
 
@@ -120,6 +136,76 @@ export default function SpeechToText() {
     setError("");
   };
 
+  // Recording timer effect
+  useEffect(() => {
+    let timer = null;
+    if (recording && startTime) {
+      timer = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - startTime) / 1000));
+      }, 250);
+    }
+    if (!recording) {
+      setElapsed(0);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [recording, startTime]);
+
+  const formatElapsed = (s) => {
+    const mm = Math.floor(s / 60)
+      .toString()
+      .padStart(2, "0");
+    const ss = (s % 60).toString().padStart(2, "0");
+    return `${mm}:${ss}`;
+  };
+
+  const handleCopy = async (value) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setShowCopied(true);
+      setTimeout(() => setShowCopied(false), 1800);
+    } catch (e) {
+      console.error("Copy failed", e);
+    }
+  };
+
+  const handleDownload = (value) => {
+    const blob = new Blob([value || ""], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "transcript.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  // Keyboard shortcuts: Space toggles recording, R resets
+  useEffect(() => {
+    const onKey = (e) => {
+      // ignore when typing into inputs
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || e.metaKey || e.ctrlKey)
+        return;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (recording) stopRecording();
+        else startRecording();
+      }
+      if (e.key === "r" || e.key === "R") {
+        // reset state
+        setText("");
+        setError("");
+        setShowResultModal(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [recording, startTime]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white overflow-hidden">
       {/* Animated background elements */}
@@ -133,33 +219,54 @@ export default function SpeechToText() {
         {/* Header */}
         <div className="text-center mb-20 animate-fadeIn">
           <div className="flex items-center justify-center gap-3 mb-6">
-            <Volume2 size={40} className="text-blue-400 animate-bounce" style={{ animationDelay: "0s" }} />
-            <h1 className="text-6xl font-black bg-gradient-to-r from-blue-400 via-cyan-300 to-purple-400 bg-clip-text text-transparent leading-tight">
-              OVOZNI<br />MATNGA
+            <Volume2
+              size={40}
+              className="text-blue-400 animate-bounce"
+              style={{ animationDelay: "0s" }}
+            />
+            <h1 className="text-5xl md:text-6xl font-extrabold bg-gradient-to-r from-blue-400 via-cyan-300 to-purple-400 bg-clip-text text-transparent leading-tight">
+              OVOZNI
+              <br />
+              MATNGA
             </h1>
-            <Volume2 size={40} className="text-purple-400 animate-bounce" style={{ animationDelay: "0.2s" }} />
+            <Volume2
+              size={40}
+              className="text-purple-400 animate-bounce"
+              style={{ animationDelay: "0.2s" }}
+            />
           </div>
-          <p className="text-slate-300 text-xl font-light tracking-widest">UZBEK SPEECH RECOGNITION</p>
+
+          <p className="text-slate-300 text-xl font-light tracking-widest">
+            UZBEK SPEECH RECOGNITION
+          </p>
         </div>
 
         {/* Main Microphone Control Card - Full Screen Focus */}
         <div className="w-full max-w-md animate-slideUp">
           <div className="relative">
             {/* Outer glow effect */}
-            <div className={`absolute inset-0 rounded-3xl blur-2xl transition-all duration-300 ${
-              recording 
-                ? 'bg-gradient-to-r from-red-500/30 to-pink-500/30 opacity-100' 
-                : 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 opacity-50'
-            }`}></div>
+            <div
+              className={`absolute inset-0 rounded-3xl blur-2xl transition-all duration-300 ${
+                recording
+                  ? "bg-gradient-to-r from-red-500/30 to-pink-500/30 opacity-100"
+                  : "bg-gradient-to-r from-blue-500/20 to-purple-500/20 opacity-50"
+              }`}
+            ></div>
 
             {/* Main card */}
-            <div className="relative backdrop-blur-2xl bg-white/8 border border-white/15 rounded-3xl p-12 shadow-2xl hover:shadow-purple-500/30 transition-all duration-300">
-              
+            <div className="relative glass-card rounded-3xl p-12 shadow-2xl hover:shadow-purple-500/30 transition-all duration-300">
               {/* Recording indicator */}
               {recording && (
                 <div className="absolute top-6 right-6 flex items-center gap-2">
                   <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                  <span className="text-xs text-red-400 font-semibold">YOZILMOQDA</span>
+                  <div className="flex flex-col items-end">
+                    <span className="text-xs text-red-400 font-semibold">
+                      YOZILMOQDA
+                    </span>
+                    <span className="text-[11px] text-slate-300">
+                      {formatElapsed(elapsed)}
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -212,15 +319,27 @@ export default function SpeechToText() {
                 <div className="text-center mb-10">
                   {recording ? (
                     <p className="text-lg font-light text-slate-200">
-                      Ovozingizni<br /><span className="text-blue-400 font-semibold">yozib olinyapman...</span>
+                      Ovozingizni
+                      <br />
+                      <span className="text-blue-400 font-semibold">
+                        yozib olinyapman...
+                      </span>
                     </p>
                   ) : loading ? (
                     <p className="text-lg font-light text-slate-200">
-                      Matn<br /><span className="text-cyan-400 font-semibold animate-pulse">aniqlanmoqda...</span>
+                      Matn
+                      <br />
+                      <span className="text-cyan-400 font-semibold animate-pulse">
+                        aniqlanmoqda...
+                      </span>
                     </p>
                   ) : (
                     <p className="text-lg font-light text-slate-300">
-                      Tayyor<br /><span className="text-slate-400 text-sm">Boshlash uchun tugmani bosing</span>
+                      Tayyor
+                      <br />
+                      <span className="text-slate-400 text-sm">
+                        Boshlash uchun tugmani bosing
+                      </span>
                     </p>
                   )}
                 </div>
@@ -230,6 +349,7 @@ export default function SpeechToText() {
                   <button
                     onClick={startRecording}
                     disabled={loading}
+                    aria-label="Start recording"
                     className="group relative w-32 h-32 rounded-full bg-gradient-to-r from-blue-500 via-cyan-500 to-purple-600 shadow-2xl hover:shadow-cyan-500/60 transition-all duration-300 disabled:opacity-50 hover:scale-110 active:scale-95 flex items-center justify-center"
                   >
                     <Mic size={56} className="text-white relative z-10" />
@@ -239,10 +359,14 @@ export default function SpeechToText() {
                 ) : (
                   <button
                     onClick={stopRecording}
+                    aria-label="Stop recording"
                     className="group relative w-32 h-32 rounded-full bg-gradient-to-r from-red-500 to-pink-600 shadow-2xl hover:shadow-red-500/60 transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center"
                   >
                     <MicOff size={56} className="text-white relative z-10" />
-                    <div className="absolute inset-0 rounded-full bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 animate-ping" style={{animationDuration: '1.5s'}}></div>
+                    <div
+                      className="absolute inset-0 rounded-full bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 animate-ping"
+                      style={{ animationDuration: "1.5s" }}
+                    ></div>
                     <div className="absolute inset-2 rounded-full border-2 border-white/20 group-hover:border-white/40 transition-all duration-300"></div>
                   </button>
                 )}
@@ -260,7 +384,7 @@ export default function SpeechToText() {
       {showResultModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn">
           {/* Backdrop */}
-          <div 
+          <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={closeModal}
           ></div>
@@ -268,7 +392,6 @@ export default function SpeechToText() {
           {/* Modal */}
           <div className="relative z-10 w-full max-w-2xl animate-slideUp">
             <div className="relative backdrop-blur-3xl bg-gradient-to-br from-white/15 via-white/10 to-white/5 border border-white/20 rounded-3xl p-0 shadow-2xl overflow-hidden">
-              
               {/* Modal header with gradient */}
               <div className="relative bg-gradient-to-r from-blue-600/40 via-purple-600/40 to-pink-600/40 border-b border-white/10 p-8">
                 <div className="flex items-start justify-between mb-4">
@@ -287,7 +410,9 @@ export default function SpeechToText() {
                         {error ? "Xatolik!" : "Natija"}
                       </h2>
                       <p className="text-slate-300 text-sm mt-1">
-                        {error ? "Qayta urinib ko'ring" : "Matn muvaffaqiyatli aniqlandı"}
+                        {error
+                          ? "Qayta urinib ko'ring"
+                          : "Matn muvaffaqiyatli aniqlandı"}
                       </p>
                     </div>
                   </div>
@@ -320,31 +445,43 @@ export default function SpeechToText() {
                     {/* Stats */}
                     <div className="grid grid-cols-2 gap-4 mb-8">
                       <div className="p-4 bg-blue-500/10 border border-blue-400/20 rounded-xl">
-                        <p className="text-blue-400 text-sm font-semibold">BELGILAR</p>
-                        <p className="text-2xl font-bold text-white mt-2">{text.length}</p>
+                        <p className="text-blue-400 text-sm font-semibold">
+                          BELGILAR
+                        </p>
+                        <p className="text-2xl font-bold text-white mt-2">
+                          {text.length}
+                        </p>
                       </div>
                       <div className="p-4 bg-purple-500/10 border border-purple-400/20 rounded-xl">
-                        <p className="text-purple-400 text-sm font-semibold">SO'ZLAR</p>
-                        <p className="text-2xl font-bold text-white mt-2">{text.split(/\s+/).length}</p>
+                        <p className="text-purple-400 text-sm font-semibold">
+                          SO'ZLAR
+                        </p>
+                        <p className="text-2xl font-bold text-white mt-2">
+                          {text.trim() ? text.trim().split(/\s+/).length : 0}
+                        </p>
                       </div>
                     </div>
 
                     {/* Action buttons */}
-                    <div className="flex gap-4">
+                    <div className="flex gap-3 items-center">
                       <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(text);
-                          alert("Matni nusxala qildim!");
-                        }}
-                        className="flex-1 py-4 px-6 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold rounded-xl transition-all duration-300 hover:shadow-cyan-500/50 hover:shadow-lg"
+                        onClick={() => handleCopy(text)}
+                        className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold rounded-xl transition-all duration-300 hover:shadow-cyan-500/50 hover:shadow-lg"
                       >
                         📋 Nusxalash
                       </button>
                       <button
-                        onClick={closeModal}
-                        className="flex-1 py-4 px-6 bg-slate-700/50 hover:bg-slate-700 text-white font-semibold rounded-xl transition-all duration-300"
+                        onClick={() => handleDownload(text)}
+                        className="py-3 px-4 bg-slate-700/50 hover:bg-slate-700 text-white font-semibold rounded-xl transition-all duration-300"
                       >
-                        ✓ Yaxshi
+                        ⤓ Yuklash
+                      </button>
+                      <div className="flex-1" />
+                      <button
+                        onClick={closeModal}
+                        className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-all duration-300"
+                      >
+                        ✓ Yopish
                       </button>
                     </div>
                   </div>
@@ -355,6 +492,12 @@ export default function SpeechToText() {
         </div>
       )}
 
+      {/* Non-blocking copied toast */}
+      {showCopied && (
+        <div className="fixed top-6 right-6 z-60 bg-black/70 text-white px-4 py-2 rounded-md shadow-lg">
+          Nusxa olindi
+        </div>
+      )}
       <style>{`
         @keyframes wave {
           0%, 100% {
