@@ -22,6 +22,7 @@ router.post('/', async (req, res) => {
     const { audioBase64, mimeType, text, updateOrderId } = requestSchema.parse(req.body);
 
     if (!audioBase64 && !text) {
+      logger.warn({ hasBody: Boolean(req.body), contentType: req.headers['content-type'] }, 'Empty voice order payload');
       return res.status(400).json({ message: 'Audio yoki matn kerak' });
     }
 
@@ -77,6 +78,15 @@ router.post('/', async (req, res) => {
 
     return res.json({ order: result.data, transcription });
   } catch (error) {
+    if (error?.statusCode === 429 || error?.message === 'GEMINI_RATE_LIMIT') {
+      return res.status(429).json({ message: 'Gemini limitiga yetildi. Birozdan keyin qayta urinib koring.' });
+    }
+    if (error?.message === 'GEMINI_JSON_INVALID') {
+      return res.status(422).json({ message: "Buyurtma JSON noto'g'ri formatda" });
+    }
+    if (error?.message === 'GEMINI_INVALID_REQUEST') {
+      return res.status(400).json({ message: "Gemini sozlamalari noto'g'ri. Model yoki API kalitini tekshiring." });
+    }
     logger.error({ error: error?.message ?? error }, 'Voice order error');
     if (error?.issues) {
       if (process.env.NODE_ENV !== 'production') {

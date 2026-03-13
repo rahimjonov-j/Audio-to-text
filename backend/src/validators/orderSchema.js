@@ -15,12 +15,28 @@ export const orderItemAddonSchema = z.object({
   narxi: z.preprocess(asNumber, z.number().nonnegative())
 });
 
+const normalizeStatus = (value) => {
+  if (typeof value !== 'string') return value;
+  const cleaned = value.trim().toLowerCase();
+  if (!cleaned) return value;
+  if (['pishirilyapti', 'pishirilmoqda', 'tayyorlanmoqda', 'cooking', 'in_progress'].includes(cleaned)) {
+    return 'pishirilmoqda';
+  }
+  if (['tayyor', 'ready', 'done', 'tayyor!'].includes(cleaned)) {
+    return 'tayyor';
+  }
+  if (['yangi', 'new', 'pending'].includes(cleaned)) {
+    return 'yangi';
+  }
+  return cleaned;
+};
+
 export const orderItemSchema = z.object({
   nomi: z.string().min(1),
   miqdor: z.preprocess(asNumber, z.number().int().positive()),
   tavsif: z.string().default(''),
   qoshimchalar: z.array(orderItemAddonSchema).default([]),
-  status: z.enum(['pishirilmoqda', 'tayyor', 'yangi']).default('pishirilmoqda'),
+  status: z.preprocess(normalizeStatus, z.enum(['pishirilmoqda', 'tayyor', 'yangi']).default('pishirilmoqda')),
   birlik_narxi: z.preprocess(asNumber, z.number().nonnegative()),
   jami_narxi: z.preprocess(asNumber, z.number().nonnegative()),
   ombor_qoldig_i: z.enum(['yetarli', 'kam']).default('yetarli')
