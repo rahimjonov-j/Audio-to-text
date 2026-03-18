@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { X, CheckCircle2, AlertCircle } from 'lucide-react'; // Ikonkalar
 import MicButton from '../components/MicButton.jsx';
 import OrderPreview from '../components/OrderPreview.jsx';
 import { useRecorder } from '../hooks/useRecorder.js';
@@ -44,6 +45,12 @@ export default function VoiceOrderPage() {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  // Modalni to'liq yopish va state'ni tozalash
+  const handleCloseModal = () => {
+    setEditing(false);
+    reset(); // store'dagi ma'lumotlarni tozalash orqali modalni yopadi
+  };
+
   const voiceOrderMutation = useMutation({
     mutationFn: async (payload) => {
       const { data } = await api.post('/voice-order', payload);
@@ -54,7 +61,7 @@ export default function VoiceOrderPage() {
       setParsedOrder(data.order);
       setStoredOrder(data.order);
       setState('preview');
-      setToast({ type: 'success', message: 'Buyurtma muvaffaqiyatli tahlil qilindi' });
+      setToast({ type: 'success', message: 'Muvaffaqiyatli tahlil qilindi ✨' });
     },
     onError: (err) => {
       setState('error');
@@ -71,10 +78,11 @@ export default function VoiceOrderPage() {
     },
     onSuccess: (order) => {
       setStoredOrder(order);
-      setToast({ type: 'success', message: 'Buyurtma oshxonaga jonatildi' });
+      setToast({ type: 'success', message: 'Buyurtma oshxonaga yuborildi 🚀' });
+      handleCloseModal(); // <--- JONATILGACH MODAL YOPILADI
     },
     onError: (err) => {
-      const message = err?.response?.data?.message ?? 'Status yangilanmadi';
+      const message = err?.response?.data?.message ?? 'Xatolik yuz berdi';
       setError(message);
       setToast({ type: 'error', message });
     }
@@ -87,32 +95,17 @@ export default function VoiceOrderPage() {
       if (!result) {
         setState('error');
         setError('Audio topilmadi');
-        setToast({ type: 'error', message: 'Audio topilmadi' });
-        return;
-      }
-      if (result.blob.size < 1500) {
-        setState('error');
-        setError('Audio juda qisqa. Qayta yozib koring.');
-        setToast({ type: 'error', message: 'Audio juda qisqa' });
         return;
       }
       try {
         const audioBase64 = await toBase64(result.blob);
-        if (!audioBase64 || audioBase64.length < 50) {
-          setState('error');
-          setError('Audio format noto‘g‘ri yoki bosh.');
-          setToast({ type: 'error', message: 'Audio format noto‘g‘ri' });
-          return;
-        }
         await voiceOrderMutation.mutateAsync({
           audioBase64,
           mimeType: result.mimeType || 'audio/webm'
         });
       } catch (err) {
-        const message = err?.message ?? 'Audio qayta ishlanmadi';
         setState('error');
-        setError(message);
-        setToast({ type: 'error', message });
+        setError(err.message);
       }
       return;
     }
@@ -125,113 +118,107 @@ export default function VoiceOrderPage() {
     }
   };
 
-  const handleEdit = () => {
-    if (!transcription) return;
-    setDraftText(transcription);
-    setEditing(true);
-  };
-
+  const handleEdit = () => { transcription && (setDraftText(transcription), setEditing(true)); };
+  
   const handleReparse = async () => {
-    if (!draftText.trim()) {
-      setError('Matn bosh bolmasin');
-      setToast({ type: 'error', message: 'Matn bosh bolmasin' });
-      return;
-    }
     setEditing(false);
     setState('processing');
-    await voiceOrderMutation.mutateAsync({
-      text: draftText,
-      updateOrderId: storedOrder?.id
-    });
+    await voiceOrderMutation.mutateAsync({ text: draftText, updateOrderId: storedOrder?.id });
   };
 
   const handleSend = async () => {
     if (!storedOrder) return;
     await statusMutation.mutateAsync({ id: storedOrder.id, status: 'NEW' });
-    setState('preview');
   };
 
   return (
-    <main className="relative flex-1 px-6 pb-16 pt-12">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-        <header className="glass rounded-3xl px-8 py-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-[var(--muted)]">Voice Order Desk</p>
-              <h1 className="text-4xl font-semibold">Ovqat buyurtmasi ovoz orqali</h1>
-              <p className="mt-2 max-w-xl text-[var(--muted)]">
-                Mikrofonni bosib buyurtmani ayting. Sistema buyurtmani avtomatik tuzadi va oshxonaga yuboradi.
-              </p>
+    <main className="relative flex h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#050505] text-white">
+      
+      {/* Background Glow */}
+      <div className={`absolute inset-0 transition-opacity duration-1000 ${state === 'recording' ? 'opacity-30' : 'opacity-0'}`}>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#3b82f6_0%,_transparent_70%)] blur-[120px]" />
+      </div>
+
+      {/* Mic Section */}
+      <div className="relative z-10 flex flex-col items-center gap-6">
+        <div className={`transition-all duration-500 transform ${state === 'recording' ? 'scale-125' : 'scale-100'}`}>
+           <MicButton state={state} onClick={handleMicClick} />
+        </div>
+        
+        <div className="h-6 flex items-center justify-center">
+            {state === 'recording' && (
+                <span className="text-[10px] font-bold tracking-[0.5em] text-blue-500 uppercase animate-pulse">Recording</span>
+            )}
+            {state === 'processing' && (
+                <span className="text-[10px] font-bold tracking-[0.5em] text-gray-500 uppercase animate-bounce">Processing</span>
+            )}
+        </div>
+      </div>
+
+      {/* POP-UP MODAL (Dark Premium) */}
+      {(parsedOrder || editing) && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-md bg-black/80 animate-in fade-in duration-300">
+          <div className="relative w-full max-w-xl bg-[#0f0f0f] border border-white/5 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.6)] rounded-[2.5rem] overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-white/5">
+              <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400">
+                {editing ? 'Tahrirlash' : 'Buyurtma Ma\'lumotlari'}
+              </h3>
+              <button 
+                onClick={handleCloseModal}
+                className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors group"
+              >
+                <X size={20} className="text-gray-400 group-hover:text-white" />
+              </button>
             </div>
-            <div className="flex flex-col items-start gap-3">
-              <MicButton state={state} onClick={handleMicClick} />
-              {state === 'recording' && (
-                <div className="wave-bars" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                  <span />
+
+            {/* Modal Content */}
+            <div className="p-8">
+              {editing ? (
+                <div className="space-y-6">
+                  <textarea
+                    className="w-full rounded-2xl bg-white/[0.03] p-5 text-white border border-white/10 focus:border-blue-500/50 outline-none transition-all resize-none font-light leading-relaxed"
+                    rows={5}
+                    value={draftText}
+                    onChange={(e) => setDraftText(e.target.value)}
+                  />
+                  <div className="flex justify-end gap-3">
+                    <button 
+                      onClick={() => setEditing(false)} 
+                      className="px-6 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-xs font-bold uppercase tracking-wider transition-all"
+                    >
+                      Bekor qilish
+                    </button>
+                    <button 
+                      onClick={handleReparse} 
+                      className="px-6 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-black text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-600/20 transition-all active:scale-95"
+                    >
+                      Yangilash
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                <OrderPreview order={parsedOrder} stored={storedOrder} onEdit={handleEdit} onSend={handleSend} />
               )}
             </div>
           </div>
-        </header>
-
-        {state === 'processing' && (
-          <section className="glass rounded-3xl p-8">
-            <p className="text-lg font-medium">Audio tahlil qilinmoqda...</p>
-            <p className="text-sm text-[var(--muted)]">Biroz kuting, tizim buyurtmani tayyorlayapti.</p>
-          </section>
-        )}
-
-        {state === 'error' && error && (
-          <section className="glass rounded-3xl border border-red-200 bg-red-50/70 p-6">
-            <p className="text-lg font-semibold text-red-700">Xatolik</p>
-            <p className="text-sm text-red-600">{error}</p>
-          </section>
-        )}
-
-        {editing && (
-          <section className="glass rounded-3xl p-6">
-            <h3 className="text-xl font-semibold">Buyurtma matnini tahrirlash</h3>
-            <textarea
-              className="mt-4 w-full rounded-2xl border border-[var(--surface-2)] bg-white p-4 text-sm"
-              rows={5}
-              value={draftText}
-              onChange={(event) => setDraftText(event.target.value)}
-            />
-            <div className="mt-4 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setEditing(false)}
-                className="button-ring cursor-pointer rounded-full border border-[var(--muted)] px-5 py-2 text-sm font-semibold"
-              >
-                Bekor qilish
-              </button>
-              <button
-                type="button"
-                onClick={handleReparse}
-                className="button-ring cursor-pointer rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white"
-              >
-                Qayta tahlil qilish
-              </button>
-            </div>
-          </section>
-        )}
-
-        {parsedOrder && !editing && (
-          <OrderPreview order={parsedOrder} stored={storedOrder} onEdit={handleEdit} onSend={handleSend} />
-        )}
-      </div>
-
-      {toast && (
-        <div className={`toast ${toast.type === 'error' ? 'toast-error' : 'toast-success'}`}>
-          {toast.message}
         </div>
       )}
 
-      <div className="wave" />
+      {/* HIGH Z-INDEX TOASTS */}
+      {toast && (
+        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-10 fade-in duration-500">
+          <div className={`flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl border ${
+            toast.type === 'error' 
+              ? 'bg-red-500/10 border-red-500/20 text-red-500' 
+              : 'bg-green-500 border-green-600 text-black shadow-green-500/20'
+          }`}>
+            {toast.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+            <span className="text-xs font-black uppercase tracking-wider">{toast.message}</span>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
