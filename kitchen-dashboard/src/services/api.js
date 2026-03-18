@@ -1,7 +1,10 @@
 import axios from 'axios';
+import { getBackendUrl } from './backendUrl.js';
+
+const baseURL = getBackendUrl();
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:4000',
+  baseURL,
   timeout: 20000
 });
 

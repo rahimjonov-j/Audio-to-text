@@ -1,11 +1,17 @@
 import { useEffect } from 'react';
 import { useKitchenStore } from '../store/useKitchenStore.js';
+import { getBackendUrl } from '../services/backendUrl.js';
 
 export function useOrdersStream() {
   const upsertOrder = useKitchenStore((state) => state.upsertOrder);
 
   useEffect(() => {
-    const url = `${import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:4000'}/orders/stream`;
+    const baseURL = getBackendUrl();
+    if (!baseURL) {
+      return undefined;
+    }
+
+    const url = `${baseURL}/orders/stream`;
     const eventSource = new EventSource(url);
 
     eventSource.onmessage = (event) => {
