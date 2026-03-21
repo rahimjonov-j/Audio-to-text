@@ -1,37 +1,32 @@
-﻿import { Mic, MicOff } from 'lucide-react';
+import React from 'react';
+import { Mic } from 'lucide-react';
+import WaveformVisualizer from './WaveformVisualizer.jsx';
+import { useOrderStore } from '../store/useOrderStore.js';
 
-const stateLabels = {
-  idle: 'Boshlash',
-  recording: 'Tugatish',
-  processing: 'Yuklanmoqda...',
-  preview: 'Yangi buyurtma',
-  error: `Qayta urinib ko'ring`
-};
-
-export default function MicButton({ state, onClick }) {
-  const isProcessing = state === 'processing';
-  const isRecording = state === 'recording';
-
+export default function MicButton({ onStart, onStop }) {
+  const { state } = useOrderStore();
+  
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={isProcessing}
-      aria-label={isRecording ? 'Ovozni toxtatish' : 'Ovozni yozib olish'}
-      className={`button-ring group flex items-center gap-3 rounded-full px-6 py-3 text-base font-semibold transition ${
-        isRecording
-          ? 'bg-[var(--accent)] text-white shadow-[0_0_24px_rgba(217,107,43,0.45)]'
-          : 'bg-[var(--surface)] text-[var(--text)]'
-      }`}
-    >
-      <span
-        className={`flex h-10 w-10 items-center justify-center rounded-full border transition ${
-          isRecording ? 'border-white/60 bg-white/20' : 'border-[var(--accent)]/30 bg-[var(--surface-2)]'
+    <div className="relative flex flex-col items-center">
+      <WaveformVisualizer isRecording={state === 'recording'} />
+
+      <button
+        onPointerDown={onStart}
+        onPointerUp={onStop}
+        onPointerCancel={onStop}
+        onPointerLeave={onStop}
+        onContextMenu={(e) => e.preventDefault()} 
+        className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center transition-all duration-300 focus:outline-none select-none touch-none relative group ${
+          state === 'recording' 
+            ? 'bg-red-500 scale-110 shadow-[0_0_50px_rgba(239,68,68,0.6)] text-white' 
+            : 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-black hover:bg-zinc-800 dark:hover:bg-zinc-300 shadow-[0_10px_30px_rgba(0,0,0,0.1)]'
         }`}
       >
-        {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
-      </span>
-      {stateLabels[state]}
-    </button>
+        {state === 'recording' && (
+          <div className="absolute inset-0 rounded-full border-4 border-red-400 animate-ping opacity-20" />
+        )}
+        <Mic className={`w-8 h-8 sm:w-10 sm:h-10 transition-transform ${state === 'recording' ? 'animate-pulse scale-110' : 'group-hover:scale-110'}`} />
+      </button>
+    </div>
   );
 }
